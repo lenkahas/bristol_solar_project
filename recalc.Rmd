@@ -1,0 +1,531 @@
+---
+title: "Recalculations"
+output: html_document
+---
+```{r}
+install.packages('BAMMtools')
+install.packages('raster')
+install.packages('rgeos')
+install.packages('GISTools')
+install.packages('rms')
+install.packages('maptools')
+install.packages('tmap')
+install.packages('classInt')
+```
+
+```{r}
+# load libraries
+
+library(rgdal)
+library(sp)
+library(BAMMtools)
+library(raster)
+library(rgeos)
+library(GISTools)
+library(rms)
+library(maptools)
+library(tmap)
+library(classInt)
+library()
+```
+
+```{r}
+#install.packages('MazamaSpatialUtils')
+library(MazamaSpatialUtils)
+```
+
+# Load data
+## Result from lidar data manipulation, buildings with a radiation
+
+```{r}
+# set projection for british national grid
+CRS1 <- ('+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs')
+```
+
+```{r}
+# full radiation
+build <- readOGR("C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/solar_proj.gpkg", "solar_calc")
+ofcom <- readOGR("C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/solar_proj.gpkg", "ofcom18_bristol")
+
+
+```
+
+```{r}
+plot(build)
+plot(lines, add= T, col = 'red')
+```
+
+```{r}
+proj4string(build)
+```
+
+
+```
+# set projection for british national grid
+CRS1 <- ('+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs')
+
+# load the build of solarradiation calculation
+# full radiation
+build1 <- readOGR('C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/solar_calc.geojson', stringsAsFactors = F)
+build1 <- spTransform(build1, CRS(CRS1))
+
+# high radiation
+build2 <- readOGR('E:/hack/TOM/build_pv_2676/build_pv_2676.shp', stringsAsFactors = F)
+build2 <- spTransform(build2, CRS(CRS1))
+build2 <- build2[,c(1,3)]
+names(build2@data) <- c('id', 'high_radiance')
+
+# high radiation area
+build3 <- read.csv('E:/hack/TOM/build_pv_2676/building_high_pixel_area.csv', stringsAsFactors = F)
+build3 <- build3[,c(2,4)]
+names(build3) <- c('id', 'high_rad_area')
+
+summary(build3)
+```
+
+## Other data
+
+```{r}
+# load roads
+lines <- readOGR(dsn = "C:/Users/Lenka/Desktop/bristol-solar-analysis-master/other_data", layer = "Road", stringsAsFactors = F)
+lines <- spTransform(lines, CRS(CRS1))
+
+# load wards
+wards <- readOGR(dsn = "C:/Users/Lenka/Desktop/bristol-solar-analysis-master/other_data", layer = "wards", stringsAsFactors = F)
+wards <- spTransform(wards, CRS(CRS1))
+
+# load lsoa's
+lsoa <- readOGR(dsn = "C:/Users/Lenka/Desktop/bristol-solar-analysis-master/other_data", layer = "IMD", stringsAsFactors = F)
+lsoa <- spTransform(lsoa, CRS(CRS1))
+lsoa@data <- lsoa@data[c(1,3)]
+
+# load IIE
+IIE <- readOGR(dsn = "C:/Users/Lenka/Desktop/bristol-solar-analysis-master/other_data", layer = "IIE", stringsAsFactors = F, encoding = "ESRI Shapefile")
+IIE <- spTransform(IIE, CRS(CRS1))
+IIE@data$II_30000up <- (IIE@data$rank_7+IIE@data$rank_8+IIE@data$rank_9)
+IIE@data <- IIE@data[c(1,12)]
+IIE@data$percINC <- (IIE@data$II_30000up*100)
+
+
+# we first load in the energy efficiency data for each building derived from epc.opendatacomunitie.org
+brist <- read.csv('C:/Users/Lenka/Desktop/bristol-solar-analysis-master/other_data/energy_performance.csv', stringsAsFactors = F)
+brist2 <- brist[c(5,9,11,21,63,82)]
+
+# load postcodes
+postcode <- read.csv("C:/Users/Lenka/Desktop/bristol-solar-analysis-master/other_data/Postcode_BR.csv", stringsAsFactors = F)
+postcode <- postcode[c(4,9)]
+
+# load feed in tariff
+feedin <- readOGR(dsn = "C:/Users/Lenka/Desktop/bristol-solar-analysis-master/other_data/feed_in.shp", stringsAsFactors = F)
+feedin <- spTransform(feedin, CRS(CRS1)) 
+feedin <- feedin[c(1, 4, 18)]
+names(feedin@data) <- c('fit_id', 'inst_kap', 'lsoa11cd')
+
+# internet usage data
+ofcom <- ofcom[c(1,3)]
+names(ofcom) <- c("LSOA11CD", "INTusage")
+
+# create a shapeile for energy and internet usage data
+energy <- merge(brist2, postcode, by.x='POSTCODE', by.y='pcds')
+g <- aggregate(energy$ENERGY_CONSUMPTION_CURRENT, by=list(energy$lsoa11cd), sum)
+names(g) <- c('lsoa11cd','ENEconsum' )
+
+# load population estimates
+pop <- read.csv('C:/Users/Lenka/Desktop/bristol-solar-analysis-master/other_data/POP.csv')
+pop$p30_65 <- rowSums(pop[33:68])
+pop <- pop[c(1,2,94)]
+pop$perc30_90 <-((pop$p30_65/pop$all_ages)*100)
+```
+
+
+# Process the data
+
+## Buildings level
+
+### Combine the lidar result and create building level
+
+```{r}
+# combine the calculations into one shp
+build@data$area <- raster::area(build)
+build <- build[,c(1,5,2,3,4)]
+names(build) <- c('id', 'area', 'radiation', 'high_radiance', 'high_rad_area')
+build_backup <- build
+# get rid of NA's
+# build <- build[which(!is.na(build$radiation)),] 
+#build <- build[which(!is.na(build$high_radiance)),]
+
+summary(build@data)
+#build <- build_backup
+```
+
+### Put the panels on roofs
+
+```{r}
+# assign panels to roof accoreding to radiance and area 
+
+# here we need to have a note to solar panels, for which the 1kw systems is roughly 8m2 needed area, we know that the rule of minimum radiance is fulfilled as we chosen the highest jenks class that match this
+
+# create new field with NA's
+build@data$panel_kW <- NA
+
+# now we want to fill the values 1, 2,3,4 and 5 (as bigger than that) according to high radiance roof area
+build@data$panel_kW <- (build@data$high_rad_area/8)
+build <- build[which(build@data$panel_kW >=1),]
+
+# calculate PV generation (kW/h/year)
+build@data$PVgeneration <- (round(build@data$panel_kW, 0)*950)
+build <- build[which(build@data$PVgeneration >= 950),]
+
+
+# calculate CO2 savings
+build@data$CO2save <- (build@data$PVgeneration*0.2556)
+
+# calculate how much it would save to residents in pounds per year
+#build@data$mny_svd <- ((0.16-(64.19/build@data$PVgeneration))*build@data$PVgeneration)
+build@data$mny_svd <- (build@data$PVgeneration*0.1437)
+
+
+build_write <- build
+build_write@data <- build_write@data[c(1,2,3,5,4,6,7,8,9)]
+names(build_write) <- c('ID', '1_TRA', '2_IRTRA', '3_URA', '4_IRURA', '5_PNP', '6_PPVSG', '7_CO2S', '8_MS')
+
+# convert the radiation to MWh
+build@data$radiation <- (build@data$radiation/1000)
+build@data$high_radiance <- (build@data$high_radiance/1000)
+
+# backup
+build_write <- build
+
+# export
+buildim <- build_write#simplify(build_write, keep=0.3)
+names(buildim@data) <- c('ID', '1_TRA', '2_IRTRA', '3_URA', '4_IRURA', '5_PNP', '6_PPVSG', '7_CO2S', '8_MS')
+writeOGR(buildim,dsn='C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/output/final_build.gpkg', "final_BUILD", driver="GPKG", overwrite=T)
+summary(buildim@data)
+
+#export csv
+write.csv(buildim@data,'C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/output/build.csv')
+```
+
+## LSOA level
+### poeples potential
+
+```{r}
+# merge with LSOAs
+lsoa <- merge(lsoa, IIE@data, by.x='LSOA11CD', by.y='lsoa11cd', all.x=T)
+lsoa <- merge(lsoa, ofcom@data, by='LSOA11CD', all.x=T)
+lsoa <- merge(lsoa, pop, by='LSOA11CD', all.x=T)
+
+names(lsoa)
+lsoa@data$homeowner <- (((lsoa$percINC/100)*(lsoa$perc30_90/100))*100)
+lsoa <- merge(lsoa, g, by.x='LSOA11CD', by.y='lsoa11cd', all.x=T)
+
+# INternet usage
+# get jenks 5 classses for both internet usage and energy consumption
+foo <- classIntervals(lsoa$INTusage, n=5, style='jenks')
+lsoa$INTclass <- cut(lsoa$INTusage, breaks = foo$brks, labels=as.character(1:5))
+lsoa@data$INTclass <- as.numeric(as.character(lsoa@data$INTclass))
+# fill in NA
+lsoa@data$INTclass[which(is.na(lsoa@data$INTclass))] <- 1
+
+# Energy usage
+foo <- classIntervals(lsoa$ENEconsum, n=5, style='jenks')
+lsoa$enerclass <- cut(lsoa$ENEconsum, breaks = foo$brks, labels=as.character(1:5))
+lsoa@data$enerclass <- as.numeric(as.character(lsoa@data$enerclass))
+# fill in NA
+lsoa@data$enerclass[which(is.na(lsoa@data$enerclass))] <- 1
+
+# calculate the potential 
+lsoa@data$potential <- (lsoa$homeowner*(lsoa$INTclass+lsoa$enerclass))
+
+# classes
+foo <- classIntervals(lsoa$potential, n=5, style='jenks')
+lsoa$potenclass <- cut(lsoa$potential, breaks = foo$brks, labels=as.character(1:5))
+lsoa@data$potenclass <- as.numeric(as.character(lsoa@data$potenclass))
+#fill in NA
+lsoa@data$potenclass[which(is.na(lsoa@data$potenclass))] <- 1
+```
+
+```{r}
+# export
+lsoa2 <- lsoa
+lsoa2 <- lsoa2[c(1,2,5,9,10,14)]
+names(lsoa2) <- c('LSOA11CD', 'imd_score', 'averageINTERNusage', 'homeownerPROBAB', 'totalENERGYconsumpt', 'potentialCLASS')
+```
+
+```{r}
+build <- spTransform(build, CRS1)
+proj4string(build)
+proj4string(lsoa)
+```
+
+### solar potential aggregation
+
+```{r}
+#get ID of wards to each house
+G <- over(build, lsoa2[,"LSOA11CD"])
+# put back to polygonss
+build@data$lsoaid <- G$LSOA11CD
+
+
+# aggregate solar potential and price
+e <- aggregate(build@data$area, by=list(build$lsoaid),sum)
+f <- aggregate(build@data$radiation, by=list(build$lsoaid), sum)
+i <- aggregate(build@data$high_radiance, by=list(build$lsoaid), sum)
+j <- aggregate(build@data$high_rad_area, by=list(build$lsoaid), sum)
+#p <- aggregate(build@data$high_rad_area_75, by=list(build$lsoaid), sum)
+k <- aggregate(build@data$panel_kW, by=list(build$lsoaid), sum)
+l <- aggregate(build@data$PVgeneration, by=list(build$lsoaid), sum)
+m <- aggregate(build@data$CO2save, by=list(build$lsoaid), sum)
+n <- aggregate(build@data$mny_svd, by=list(build$lsoaid), sum)
+o <- aggregate(feedin@data$inst_kap, by=list(feedin$lsoa11cd), sum)
+
+# create shp with ggregated area
+names(e) <- c("LSOA11CD", "area")
+final_lsoa <- merge(lsoa2, e, by="LSOA11CD")
+
+# radiation
+names(f) <- c("LSOA11CD", "radiation")
+final_lsoa <- merge(final_lsoa, f, by="LSOA11CD")
+
+# high radiance
+names(i) <- c("LSOA11CD", "high_radiance")
+final_lsoa <- merge(final_lsoa, i, by="LSOA11CD")
+
+# high radiance area
+names(j) <- c("LSOA11CD", "high_rad_area")
+final_lsoa <- merge(final_lsoa, j, by="LSOA11CD")
+
+# high radiance 75
+#names(p) <- c("LSOA11CD", "high_rad_area_75")
+#final_lsoa <- merge(final_lsoa, p, by="LSOA11CD")
+
+# panel kW
+names(k) <- c("LSOA11CD", "panel_kW")
+final_lsoa <- merge(final_lsoa, k, by="LSOA11CD")
+
+#PVgeneration
+names(l) <- c("LSOA11CD", "PVgeneration")
+final_lsoa <- merge(final_lsoa, l, by="LSOA11CD")
+
+# co2save
+names(m) <- c("LSOA11CD", "CO2save")
+final_lsoa <- merge(final_lsoa, m, by="LSOA11CD")
+
+#money saved
+names(n) <- c("LSOA11CD", "mny_svd")
+final_lsoa <- merge(final_lsoa, n, by="LSOA11CD")
+
+# existing capacity
+names(o) <- c("LSOA11CD", "inst_kap")
+final_lsoa <- merge(final_lsoa, o, by="LSOA11CD")
+final_lsoa@data$inst_kap[which(is.na(final_lsoa@data$inst_kap))] <- 0
+
+# round the numbers
+final_lsoa$radiation <- (final_lsoa$radiation/1000)
+final_lsoa$high_radiance <- (final_lsoa$high_radiance/1000)
+
+# add difference field between the existing and potential kapacity
+final_lsoa@data$difference <- (final_lsoa@data$panel_kW - final_lsoa@data$inst_kap)
+
+summary(final_lsoa@data)
+```
+
+```{r}
+lsoa3 <- final_lsoa[c(1,2,4,6,7,8,10,9,11,12,13,14,15,16)]
+#names(lsoa3) <- c('LSOA11CD', 'IMD_score', 'homeowner_probab', 'population_potential', 'Total_area_m2', 'Incoming_radiation_MWh/pa', 'Unshaded_area_m2', 'Incom_radia_unshaded_MWh/pa', 'Potential_panel_capacity_kWh', 'PPV_generation_kWh/pa', 'CO2_savings_kg/pa', 'Money_saved_pound/pa', 'inst_capac', 'diff')
+
+names(lsoa3) <- c('LSOA11CD', '9_IMD', '10_PMH', '11_PPS', '1_TRA', '2_IRTRA', '3_URA', '4_IRURA', '5_PNP', '6_PPVSG', '7_CO2S', '8_MS', '12_EPC', '13_DPEC')
+
+write.csv(lsoa3@data,'C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/output/final_LSOA.csv')
+
+lsoa4 <- simplify(lsoa3, keep=0.3)
+
+writeOGR(lsoa3,dsn='C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/output/final_LSOA.gpkg', "final_LSOA", driver="GPKG", overwrite=T)
+
+```
+
+
+## Ward level
+
+```{r}
+# Now we create the wards level
+# due to overlay issue we need to overlay centrooid of the lsoa to wards
+# create centrooids
+cents <- coordinates(final_lsoa)
+cents <- SpatialPointsDataFrame(coords=cents, data=final_lsoa@data, proj4string=CRS(CRS1))
+final_lsoa <- cents
+# get ID of wards to each house and each lsoa
+H <- over(final_lsoa, wards[,"name"])
+
+final_lsoa@data$wardname <- H$name
+
+# aggregate solar potential, price and other
+e <- aggregate(final_lsoa@data$imd_score, by=list(final_lsoa$wardname), mean)
+f <- aggregate(final_lsoa@data$homeownerPROBAB, by=list(final_lsoa@data$wardname), mean)
+g <- aggregate(final_lsoa@data$totalENERGYconsumpt, by=list(final_lsoa@data$wardname), sum)
+h <- aggregate(final_lsoa@data$potentialCLASS, by=list(final_lsoa@data$wardname), mean)
+j <- aggregate(final_lsoa@data$area, by=list(final_lsoa@data$wardname), sum)
+k <- aggregate(final_lsoa@data$radiation, by=list(final_lsoa@data$wardname), sum)
+l <- aggregate(final_lsoa@data$high_radiance, by=list(final_lsoa@data$wardname), sum)
+m <- aggregate(final_lsoa@data$high_rad_area, by=list(final_lsoa@data$wardname), sum)
+#s <- aggregate(final_lsoa@data$high_rad_area_75, by=list(final_lsoa@data$wardname), sum)
+n <- aggregate(final_lsoa@data$panel_kW, by=list(final_lsoa@data$wardname), sum)
+o <- aggregate(final_lsoa@data$PVgeneration, by=list(final_lsoa@data$wardname), sum)
+p <- aggregate(final_lsoa@data$CO2save, by=list(final_lsoa@data$wardname), sum)
+q <- aggregate(final_lsoa@data$mny_svd, by=list(final_lsoa@data$wardname), sum)
+r <- aggregate(final_lsoa@data$inst_kap, by=list(final_lsoa@data$wardname), sum)
+
+# add to wards
+names(e) <- c("name", "imd_score")
+final_ward <- merge(wards, e, by="name")
+
+names(f) <- c("name", "homeownerPROBAB")
+final_ward <- merge(final_ward, f, by="name")
+
+names(g) <- c("name", "totalENERGYconsumpt")
+final_ward <- merge(final_ward, g, by="name")
+
+names(h) <- c("name", "potentialCLASS")
+final_ward <- merge(final_ward, h, by="name")
+
+names(j) <- c("name", "area")
+final_ward <- merge(final_ward, j, by="name")
+
+names(k) <- c("name", "radiation")
+final_ward <- merge(final_ward, k, by="name")
+
+names(l) <- c("name", "high_radiance")
+final_ward <- merge(final_ward, l, by="name")
+
+names(m) <- c("name", "high_rad_area")
+final_ward <- merge(final_ward, m, by="name")
+
+#names(s) <- c("name", "high_rad_area_75")
+#final_ward <- merge(final_ward, s, by="name")
+
+names(n) <- c("name", "panel_kW")
+final_ward <- merge(final_ward, n, by="name")
+
+names(o) <- c("name", "PVgeneration")
+final_ward <- merge(final_ward, o, by="name")
+
+names(p) <- c("name", "CO2save")
+final_ward <- merge(final_ward, p, by="name")
+
+names(q) <- c("name", "mny_svd")
+final_ward <- merge(final_ward, q, by="name")
+
+names(r) <- c("name", "inst_kap")
+final_ward <- merge(final_ward, r, by="name")
+
+# add difference field between the existing and potential kapacity
+final_ward@data$difference <- (final_ward@data$panel_kW - final_ward@data$inst_kap)
+```
+
+```{r}
+final_ward2 <- final_ward[c(1,4,5,6,8,9,10,12,11,13,14,15,16,17,18)]
+#names(final_ward2) <- c('WARDName', 'WARDID', 'IMD_score', 'homeowner_probab',  'population_potential', 'Total_area_m2', 'Incoming_radiation_MWh_pa', 'Unshaded_area_m2', 'Incom_radia_unshaded_MWh_pa', 'Potential_panel_capacity_kWh', 'PPV_generation_kWh_pa', 'CO2_savings_kg_pa', 'Money_saved_pound_pa', 'inst_capac', 'diff')
+names(final_ward2) <- c('WARDNAME', 'WARDID', '9_IMD', '10_PMH', '11_PPS', '1_TRA', '2_IRTRA', '3_URA', '4_IRURA', '5_PNP', '6_PPVSG', '7_CO2S', '8_MS', '12_EPC', '13_DPEC')
+
+# write
+wardi <- simplify(final_ward2, keep=0.3)
+writeOGR(final_ward2,dsn='C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/output/FINAL_ward.gpkg', "final_WARD", driver="GPKG", overwrite=T)
+write.csv(final_ward2@data,'C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/output/final_WARD.csv')
+```
+
+
+
+# Building the street level
+```{r}
+# Data munging
+# create backup of the building
+output <- build_write
+# We want to calculate centrooids of each polygons
+cents <- coordinates(output)
+cents <- SpatialPointsDataFrame(coords=cents, data=output@data, 
+                  proj4string=CRS(CRS1))
+
+# create backup
+cents2 <- cents
+
+# then we want to snap polygons to closest street 
+# we make a new field to hold the line ID
+cents2@data$nearest_line <- as.character('')
+
+# the we create a loop which for each point, get ID of nearest line and store it in previously created field
+# this function go through all 94521 centrooids, so that is quite slow, yet the easiest and fastest way
+system.time(
+  for (i in 1:nrow(cents2)){
+  cents2@data[i,"nearest_line"] <-
+    lines[which.min(gDistance(cents2[i,], lines, byid= TRUE)),]@data$id
+})
+
+```
+
+```{r}
+# then we want to store the generated line ID's in the original polygon data
+output <- merge(output, cents2, by='ID')
+
+# then we want to group the polygons by the line id
+streetpol <- unionSpatialPolygons(output, output$nearest_line, ID=output$nearest_line)
+
+# we also create buffer for the grouped polygons to make sure that on actual map the layer will look a bit different then the building level
+streetpolbuffer <- gBuffer(streetpol, byid=T, width=3.0)
+
+# we then aggregate street potential and price to line ID's from original data
+d <- aggregate(output@data$area, by=list(output$nearest_line),sum)
+c <- aggregate(output@data$radiation, by=list(output$nearest_line),sum)
+e <- aggregate(output@data$high_rad_area, by=list(output$nearest_line),sum)
+f <- aggregate(output@data$high_radiance, by=list(output$nearest_line),sum)
+g <- aggregate(output@data$panel_kW, by=list(output$nearest_line),sum)
+h <- aggregate(output@data$PVgeneration, by=list(output$nearest_line),sum)
+i <- aggregate(output@data$CO2save, by=list(output$nearest_line),sum)
+j <- aggregate(output@data$mny_svd, by=list(output$nearest_line),sum)
+
+# TO get those into  the street level data we need to first create ID vector within spatial polygons and then create spatial polygon data frame
+# extract the line ID's
+# write a function
+getidpol <- function(df){
+ids <- sapply(slot(df, "polygons"), function(x) slot(x, "ID")) 
+ids.df <- data.frame(ids, row.names = ids )
+df <- SpatialPolygonsDataFrame(df, ids.df)
+  return(df)
+}
+# apply
+street_buf_id <- getidpol(streetpolbuffer)
+
+# then we nconnect the street polygons with the aggregated solar potential and price saved
+names(street_buf_id@data) <- c('ID') 
+names(d) <- c("ID", "Total_area_m2")
+final_street_level <- merge(street_buf_id, d, by="ID")
+
+names(c) <- c("ID", "Tot_incom_radiat_MWh/pa")
+final_street_level <- merge(final_street_level, c, by="ID")
+
+names(e) <- c("ID", "Unshaded_area_m2")
+final_street_level <- merge(final_street_level, e, by="ID")
+
+names(f) <- c("ID", "Unshad_radiati_MWh/pa")
+final_street_level <- merge(final_street_level, f, by="ID")
+
+names(g) <- c("ID", "Potent_panel_capacity_kWh")
+final_street_level <- merge(final_street_level, g, by="ID")
+
+names(h) <- c("ID", "Pot_pan_generation_kWh/pa")
+final_street_level <- merge(final_street_level, h, by="ID")
+
+names(i) <- c("ID", "CO2_saving_kg/pa")
+final_street_level <- merge(final_street_level, i, by="ID")
+
+names(j) <- c("ID", "Money_savin_pound/pa")
+final_street_level <- merge(final_street_level, j, by="ID")
+```
+
+```{r}
+#rename 
+names(final_street_level) <- c('STREETID', '1_TRA', '2_IRTRA', '3_URA', '4_IRURA', '5_PNP', '6_PPVSG', '7_CO2S', '8_MS')
+#export
+#streetsim <- simplify(final_street_level, keep=0.3)
+write.csv(final_street_level@data,'C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/output/final_STREET.csv')
+writeOGR(final_street_level,dsn='C:/Users/Lenka/Desktop/bristol-solar-analysis-master/recalculations/output/final_STREET.gpkg', "final_STREET", driver="GPKG", overwrite=T)
+```
