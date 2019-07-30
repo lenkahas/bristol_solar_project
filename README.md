@@ -8,7 +8,7 @@ Additional, geodemographic open source data were used to provide population sola
 
 ## Prerequisities
 
-To run the code, you will need to have R installed. All required packages will be installed at the beginning of the rmarkdown.
+To run the code, you will need to have R installed. All required packages will be installed at the beginning of the rmarkdown. If you wish to use the data for analysis, we provide compressed folder simple CSVs for each layer as well as spatial .gpkg layer. Be aware of the geopackage format we used for exporting, it preserves the BNG projection and coordinates, however, this format is not suitable for ArcGIS, please use QGIS to preview the data or use the [Bristol Open data]() to download formats such as GeoJSON or SHP.
 
 
 ## Authors
