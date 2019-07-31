@@ -46,7 +46,7 @@ This project is licensed under the MIT License - see the [LICENSE.md](https://gi
 |CO2 savings (kg/per annum)                              | 7_CO2S                   |
 |Money savings (£/per annum)                             | 8_MS                     |
 |LSOA11CD	                                               | LSOA11CD                 |
-|IMD Score	                                             | 9_IMD                    |
+|IMD Score (The higher the number, the more deprived)    | 9_IMD                    |
 |Probability of meeting homeowner (1 low - 15 high)	     | 10_PMH                   |
 |Population potential for Solar energy (1 low - 5 high)	 | 11_PPS                   |
 |Existing panels capacity (kWh)	                         | 12_EPC                   |
