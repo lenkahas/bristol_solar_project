@@ -34,20 +34,20 @@ This project is licensed under the MIT License - see the [LICENSE.md](https://gi
 
 ## Attachments
 
-| Variable description                                   | Shortcut used within data|
-|:-------------------------------------------------------|-------------------------:|
-|ID                                                      | ID                       |
-|Total roof area (m2)                                    | 1_TRA                    |
-|Incoming radiation (kWh/per annum)                      | 2_IRTRA                  |
-|Unshaded roof area (m2)	                               | 3_URA                    |
-|Incoming radiation on unshaded roof area (kWh/per annum)| 4_IRURA                  |
-|Potential number of panels/ panel capacity (kWh)        | 5_PNP                    |
-|Potential PV system generation (kWh/per annum)	         | 6_PPVSG                  |
-|CO2 savings (kg/per annum)                              | 7_CO2S                   |
-|Money savings (£/per annum)                             | 8_MS                     |
-|LSOA11CD	                                               | LSOA11CD                 |
-|IMD Score (The higher the number, the more deprived)    | 9_IMD                    |
-|Probability of meeting homeowner (1 low - 15 high)	     | 10_PMH                   |
-|Population potential for Solar energy (1 low - 5 high)	 | 11_PPS                   |
-|Existing panels capacity (kWh)	                         | 12_EPC                   |
-|Difference between potential and existing capacity	     | 13_DPEC                  |
+| Variable description                                             | Shortcut used within data|
+|:-----------------------------------------------------------------|-------------------------:|
+|ID                                                                | ID                       |
+|Total roof area (m2)                                              | 1_TRA                    |
+|Incoming radiation (thousands kWh/per annum)                      | 2_IRTRA                  |
+|Unshaded roof area (m2)	                                         | 3_URA                    |
+|Incoming radiation on unshaded roof area (thousands kWh/per annum)| 4_IRURA                  |
+|Potential number of panels/ panel capacity (kWh)                  | 5_PNP                    |
+|Potential PV system generation (kWh/per annum)	                   | 6_PPVSG                  |
+|CO2 savings (kg/per annum)                                        | 7_CO2S                   |
+|Money savings (£/per annum)                                       | 8_MS                     |
+|LSOA11CD	                                                         | LSOA11CD                 |
+|IMD Score (The higher the number, the more deprived)              | 9_IMD                    |
+|Probability of meeting homeowner (1 low - 15 high)	               | 10_PMH                   |
+|Population potential for Solar energy (1 low - 5 high)	           | 11_PPS                   |
+|Existing panels capacity (kWh)	                                   | 12_EPC                   |
+|Difference between potential and existing capacity	               | 13_DPEC                  |
