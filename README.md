@@ -1,3 +1,5 @@
+![Bristol Solar Potential Project](./BMS_logo_web-03.png)
+
 # Calculating the solar potential for buildings in Bristol City, England, Part 2
 
 A repository that shows how the Bristol Solar Team at the Open Data Bristol hackathon event (Nov 2018) estimated solar potential for buildings in Bristol and population potential for solar energy, England using open data (LiDAR - Environment Agency, Census) and open source tools (R,SAGA). 
